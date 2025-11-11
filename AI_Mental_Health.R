@@ -91,11 +91,6 @@ gs4_auth(email = "zhangqiyang0329@gmail.com")
 findings <- read_sheet(id, sheet = "Findings", col_types = "c")
 studies <- read_sheet(id, sheet = "Studies", col_types = "c")   # includes separate effect sizes for each finding from a study
 
-# setwd("~/Desktop/Research2025/AI_WellBeing")
-# # set up to load from Google
-# findings <- read_excel("AI_Chatbot_Well-being.xlsx", sheet = "Findings")
-# studies <- read_excel("AI_Chatbot_Well-being.xlsx", sheet = "Studies")
-
 rm(id)
 
 ########################################################################################################
@@ -110,11 +105,13 @@ findings <- subset(findings, is.na(findings$Drop) == TRUE)
 # merge dataframes
 full <- merge(studies, findings, by = c("Study"), all = TRUE, suffixes = c(".s", ".f"))
 full <- subset(full, is.na(full$Authors.s)!=TRUE)
+#subset to generative only
+full <- subset(full, is.na(full$Drop.s)==TRUE)
 
 # format to correct variable types
 nums <- c("Treatment.N.original", "Control.N.original",
-          "T_Mean_Pre", "T_SD_Pre", "C_Mean_Pre", 
-          "C_SD_Pre", "T_Mean_Post", "T_SD_Post", 
+          "T_Mean_Pre", "T_SD_Pre", "C_Mean_Pre", "Treatment.Cluster",
+          "C_SD_Pre", "T_Mean_Post", "T_SD_Post", "Control.Cluster",
           "C_Mean_Post", "C_SD_Post", "Clustered",
           "Age.mean","Duration.weeks", "Follow-up",
           "Targeted", "Students", "Clinical", "Personalized",
@@ -161,6 +158,34 @@ full$Effect.Size <- full$Effect.Size*-1
 #create full sample/total clusters variables
 full$Sample <- full$Treatment.N.original + full$Control.N.original
 
+###############################################################
+#Calculate meta-analytic variables: Correct ES for clustering (Hedges, 2007, Eq.19)
+###############################################################
+#first, create an assumed ICC
+full$icc <- NA
+full$icc[which(full$Clustered == 1)] <- 0.2
+
+#find average students/cluster
+full$Treatment.Cluster.n <- NA
+full$Treatment.Cluster.n[which(full$Clustered == 1)] <- round(full$Treatment.N.original[which(full$Clustered == 1)]/full$Treatment.Cluster[which(full$Clustered == 1)], 0)
+full$Control.Cluster.n <- NA
+full$Control.Cluster.n[which(full$Clustered == 1)] <- round(full$Control.N.original[which(full$Clustered == 1)]/full$Control.Cluster[which(full$Clustered == 1)], 0)
+# find other parts of equation
+full$n.TU <- NA
+full$n.TU <- ((full$Treatment.N.original * full$Treatment.N.original) - (full$Treatment.Cluster * full$Treatment.Cluster.n * full$Treatment.Cluster.n))/(full$Treatment.N.original * (full$Treatment.Cluster - 1))
+full$n.CU <- NA
+full$n.CU <- ((full$Control.N.original * full$Control.N.original) - (full$Control.Cluster * full$Control.Cluster.n * full$Control.Cluster.n))/(full$Control.N.original * (full$Control.Cluster - 1))
+
+# next, calculate adjusted ES, save the originals, then replace only the clustered ones
+full$Effect.Size.adj <- full$Effect.Size * (sqrt(1-full$icc*(((full$Sample.size-full$n.TU*full$Treatment.Cluster - full$n.CU*full$Control.Cluster)+full$n.TU + full$n.CU - 2)/(full$Sample.size-2))))
+
+# save originals, replace for clustered
+full$Effect.Size.orig <- full$Effect.Size
+full$Effect.Size[which(full$Clustered==1)] <- full$Effect.Size.adj[which(full$Clustered==1)]
+
+num <- c("Effect.Size")
+full[num] <- lapply(full[num], as.numeric)
+rm(num)
 ################################################################
 # Calculate meta-analytic variables: Variances (Lipsey & Wilson, 2000, Eq. 3.23)
 ################################################################
@@ -169,46 +194,9 @@ full$se<-sqrt(((full$Treatment.N.original+full$Control.N.original)/(full$Treatme
 
 #calculate variance
 full$var<-full$se*full$se
-#####################################
-#Compare generative and rule-based
-#####################################
-# V_list <- impute_covariance_matrix(vi=full$var, cluster=full$StudyID, r=0.8)
-# 
-# MVnull <- rma.mv(yi=Effect.Size,
-#                  V=V_list,
-#                  random=~1 | StudyID/ESId,
-#                  test="t",
-#                  data=full,
-#                  method="REML")
-# MVnull
-# #View(full[c("Study","Effect.Size", "T_Mean_Pre", "Outcomes", "Targeted", "Clinical", "ActiveorPassive", "Continent")])
-# 
-# #t-test of each covariate#
-# MVnull.coef <- coef_test(MVnull, cluster=full$StudyID, vcov="CR2")
-# MVnull.coef
-# 
-# terms <- c("Response.generation.approach")
-# formula <- reformulate(termlabels = c(terms))
-# 
-# MVfull <- rma.mv(yi=Effect.Size,
-#                  V=V_list,
-#                  mods=formula,
-#                  random=~1 | StudyID/ESId,
-#                  test="t",
-#                  data=full,
-#                  method="REML")
-# MVfull
-# #t-test of each covariate#
-# MVfull.coef <- coef_test(MVfull, cluster=full$StudyID, vcov="CR2")
-# MVfull.coef
-
-#########################
 ########################################
 #meta-regression
 ########################################
-#subset to generative only
-full <- subset(full, is.na(full$Drop.s)==TRUE)
-
 #Centering, when there is missing value, this won't work
 full$FemalePercent <- full$Female/full$Sample.size
 full$FiftyPercentFemale <- 0
@@ -235,24 +223,125 @@ MVnull <- metafor::rma.mv(yi=Effect.Size,
                  dfs  = "contain",
                  data=full,
                  method="REML",
-                 test = "t")
+                 test = "t",
+                 tdist=TRUE)
 MVnull
 
 #t-test of each covariate# # small-sample df approximation
 MVnull.coef <- coef_test(MVnull, cluster=full$StudyID, vcov="CR2", test = "Satterthwaite")
 MVnull.coef
-
 ### Output prediction interval ###
 dat_clean <- data.frame(yi = full$Effect.Size, se_g = full$se)
 dat_clean <- na.omit(dat_clean)
-
 yi_clean <- dat_clean$yi
 se_g_clean <- dat_clean$se_g
 install.packages("pimeta")
 library(pimeta)
-
 pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
+print(pima_result)
 
+#Depression
+Depression <- subset(full, Outcomes == "Depression")
+V_list <- impute_covariance_matrix(vi=Depression$var, cluster=Depression$StudyID, r=0.8)
+#test="t"
+MVnull <- metafor::rma.mv(yi=Effect.Size,
+                          V=V_list,
+                          random=~1 | StudyID/ESId,
+                          dfs  = "contain",
+                          data=Depression,
+                          method="REML",
+                          test = "t",
+                          tdist=TRUE)
+MVnull
+
+#t-test of each covariate# # small-sample df approximation
+MVnull.coef <- coef_test(MVnull, cluster=Depression$StudyID, vcov="CR2", test = "Satterthwaite")
+MVnull.coef
+
+### Output prediction interval ###
+dat_clean <- data.frame(yi = Depression$Effect.Size, se_g = Depression$se)
+dat_clean <- na.omit(dat_clean)
+yi_clean <- dat_clean$yi
+se_g_clean <- dat_clean$se_g
+pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
+print(pima_result)
+
+#Anxiety
+Anxiety <- subset(full, Outcomes == "Anxiety")
+V_list <- impute_covariance_matrix(vi=Anxiety$var, cluster=Anxiety$StudyID, r=0.8)
+#test="t"
+MVnull <- metafor::rma.mv(yi=Effect.Size,
+                          V=V_list,
+                          random=~1 | StudyID/ESId,
+                          dfs  = "contain",
+                          data=Anxiety,
+                          method="REML",
+                          test = "t",
+                          tdist=TRUE)
+MVnull
+
+#t-test of each covariate# # small-sample df approximation
+MVnull.coef <- coef_test(MVnull, cluster=Anxiety$StudyID, vcov="CR2", test = "Satterthwaite")
+MVnull.coef
+
+### Output prediction interval ###
+dat_clean <- data.frame(yi = Anxiety$Effect.Size, se_g = Anxiety$se)
+dat_clean <- na.omit(dat_clean)
+yi_clean <- dat_clean$yi
+se_g_clean <- dat_clean$se_g
+pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
+print(pima_result)
+
+#NA
+NeA <- subset(full, Outcomes == "Negative Affect/Mood")
+V_list <- impute_covariance_matrix(vi=NeA$var, cluster=NeA$StudyID, r=0.8)
+#test="t"
+MVnull <- metafor::rma.mv(yi=Effect.Size,
+                          V=V_list,
+                          random=~1 | StudyID/ESId,
+                          dfs  = "contain",
+                          data=NeA,
+                          method="REML",
+                          test = "t",
+                          tdist=TRUE)
+MVnull
+
+#t-test of each covariate# # small-sample df approximation
+MVnull.coef <- coef_test(MVnull, cluster=NeA$StudyID, vcov="CR2", test = "Satterthwaite")
+MVnull.coef
+
+### Output prediction interval ###
+dat_clean <- data.frame(yi = NeA$Effect.Size, se_g = NeA$se)
+dat_clean <- na.omit(dat_clean)
+yi_clean <- dat_clean$yi
+se_g_clean <- dat_clean$se_g
+pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
+print(pima_result)
+
+#Stress
+Stress <- subset(full, Outcomes == "Stress")
+V_list <- impute_covariance_matrix(vi=Stress$var, cluster=Stress$StudyID, r=0.8)
+#test="t"
+MVnull <- metafor::rma.mv(yi=Effect.Size,
+                          V=V_list,
+                          random=~1 | StudyID/ESId,
+                          dfs  = "contain",
+                          data=Stress,
+                          method="REML",
+                          test = "t",
+                          tdist=TRUE)
+MVnull
+
+#t-test of each covariate# # small-sample df approximation
+MVnull.coef <- coef_test(MVnull, cluster=Stress$StudyID, vcov="CR2", test = "Satterthwaite")
+MVnull.coef
+
+### Output prediction interval ###
+dat_clean <- data.frame(yi = Stress$Effect.Size, se_g = Stress$se)
+dat_clean <- na.omit(dat_clean)
+yi_clean <- dat_clean$yi
+se_g_clean <- dat_clean$se_g
+pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
 print(pima_result)
 
 # yi_uni, vi_uni should be one effect and its sampling variance per study
@@ -274,11 +363,6 @@ summary(fit_HKSJ_SJ)
 pred_HKSJ <- predict(fit_HKSJ_SJ)
 pred_HKSJ
 
-# IEpost_model_null <- rma(yi = g, #effect size
-#                          vi = var, #variance
-#                          data =data_postIE, #data name
-#                          method ="REML", #estimate tau2 using REML
-#                          test="knha") #use Knapp-Hartung t-tests
 #####
 #subgroup
 ######
@@ -295,6 +379,8 @@ fit_dep <- rma(
   test   = "knha"
 )
 summary(fit_dep)
+pred_dep <- predict(fit_dep)
+pred_dep
 
 # Subgroup: anxiety
 fit_anx <- rma(
@@ -305,7 +391,8 @@ fit_anx <- rma(
   test   = "knha"
 )
 summary(fit_anx)
-
+pred_anx <- predict(fit_anx)
+pred_anx
 # Subgroup: NA
 fit_negative <- rma(
   yi     = Effect.Size,
@@ -315,7 +402,8 @@ fit_negative <- rma(
   test   = "knha"
 )
 summary(fit_negative)
-
+pred_negative <- predict(fit_negative)
+pred_negative
 # Subgroup: Stress
 fit_stress <- rma(
   yi     = Effect.Size,
@@ -325,64 +413,11 @@ fit_stress <- rma(
   test   = "knha"
 )
 summary(fit_stress)
-# Depression
-pred_dep <- predict(fit_dep)
-pred_dep$pi.lb; pred_dep$pi.ub
-
-# Anxiety
-pred_anx <- predict(fit_anx)
-pred_anx$pi.lb; pred_anx$pi.ub
-
-# Negative affect/mood
-pred_neg <- predict(fit_negative)
-pred_neg$pi.lb; pred_neg$pi.ub
-
-# Stress
 pred_stress <- predict(fit_stress)
-pred_stress$pi.lb; pred_stress$pi.ub
+pred_stress
 ########################
 #Moderator analysis, single moderator per model, Test whether subgroups differ using a moderator in a single model
 #####################
-#Outcome as a moderator
-by_study_outcome <- by_study_outcome %>%
-  mutate(
-    Outcomes = factor(Outcomes,
-                      levels = c("Depression", "Anxiety", "Stress", "Negative Affect/Mood"))
-  )
-
-# Set Depression as the reference level
-by_study_outcome$Outcomes <- relevel(by_study_outcome$Outcomes, ref = "Depression")
-
-# Fit one-moderator model (univariate; HKSJ + SJ)
-fit_outcomes <- rma(
-  yi     = Effect.Size,
-  vi     = var,
-  data   = by_study_outcome,
-  mods   = ~ Outcomes,         # coefficients are differences vs Depression
-  method = "SJ",               # Sidik–Jonkman tau^2
-  test   = "knha"              # Hartung–Knapp–Sidik–Jonkman inference
-)
-
-summary(fit_outcomes)
-
-# Robust (CR2) SEs clustered on Study to address residual dependence
-# Align cluster IDs to the rows actually used in the fit
-mf <- model.frame(fit_outcomes)
-# After fitting fit_outcomes
-# Make sure Study exists in by_study_outcome
-stopifnot("Study" %in% names(by_study_outcome))
-
-# Subset the Study vector to the rows used in the model
-cluster_vec <- by_study_outcome$Study[fit_outcomes$not.na]
-
-# Now run CR2 robust inference
-rob_outcomes <- coef_test(fit_outcomes,
-                          cluster = cluster_vec,
-                          vcov = "CR2",
-                          test = "Satterthwaite")
-
-rob_outcomes
-
 #########
 #"ActiveorPassive"
 #########
@@ -428,180 +463,6 @@ rob_AP <- coef_test(fit_AP,
 
 rob_AP
 
-#######
-#Age
-########
-# Build by_study_outcome if not already done
-by_study_outcome <- full %>%
-  group_by(Study, Outcomes) %>%
-  summarise(
-    Effect.Size = mean(Effect.Size, na.rm = TRUE),
-    var         = mean(var, na.rm = TRUE),
-    n_rows      = n(),
-    .groups     = "drop"
-  )
-
-# Join Age from full (ensure one Age per Study)
-by_study_outcome <- by_study_outcome %>%
-  left_join(full %>% distinct(Study, Age), by = "Study")
-
-# Normalize Age labels to exactly: "early adulthood", "middle adulthood", "late adulthood"
-by_study_outcome <- by_study_outcome %>%
-  mutate(
-    Age = tolower(Age),
-    Age = case_when(
-      Age %in% c("late adulthood","late adult","late")    ~ "late adulthood",
-      Age %in% c("middle adulthood","middle adult","mid") ~ "middle adulthood",
-      Age %in% c("early adulthood","early adult","early") ~ "early adulthood",
-      TRUE ~ Age
-    ),
-    Age3 = factor(Age, levels = c("early adulthood","middle adulthood","late adulthood"))
-  )
-
-# Drop rows with missing moderator or essentials
-dat_age <- subset(by_study_outcome, !is.na(Age3) & !is.na(Effect.Size) & !is.na(var))
-stopifnot(nrow(dat_age) > 0)
-
-# Set reference = early adulthood and fit HKSJ model (SJ tau^2)
-dat_age$Age3 <- relevel(dat_age$Age3, ref = "early adulthood")
-
-fit_age <- rma(
-  yi     = dat_age$Effect.Size,
-  vi     = dat_age$var,
-  mods   = ~ Age3,       # coefficients: middle−early, late−early
-  method = "SJ",
-  test   = "knha",
-  data   = dat_age
-)
-summary(fit_age)
-
-# CR2 robust SEs clustered by Study, aligned to rows used in the fit
-cluster_vec <- dat_age$Study[fit_age$not.na]
-rob_age <- coef_test(fit_age, cluster = cluster_vec, vcov = "CR2", test = "Satterthwaite")
-rob_age
-
-############
-#Clinical
-############
-by_study_outcome <- by_study_outcome %>%
-  left_join(full %>% distinct(Study, Clinical), by = "Study")
-
-# 3) Recode Clinical to a factor with explicit levels and reference
-# If Clinical is numeric (0/1) or character "0"/"1", coerce then label
-by_study_outcome <- by_study_outcome %>%
-  mutate(
-    Clinical = suppressWarnings(as.numeric(Clinical)),
-    Clinical = factor(Clinical, levels = c(0, 1), labels = c("Nonclinical", "Clinical"))
-  )
-# Set Nonclinical as reference (already first level); relevel if needed:
-by_study_outcome$Clinical <- relevel(by_study_outcome$Clinical, ref = "Nonclinical")
-
-# 4) Drop rows with missing moderator or essentials
-dat_cli <- subset(by_study_outcome, !is.na(Clinical) & !is.na(Effect.Size) & !is.na(var))
-stopifnot(nrow(dat_cli) > 0)
-
-# 5) Fit one-moderator model (HKSJ + SJ)
-fit_clin <- rma(
-  yi     = dat_cli$Effect.Size,
-  vi     = dat_cli$var,
-  mods   = ~ Clinical,   # coefficient is Clinical vs Nonclinical
-  method = "SJ",         # Sidik–Jonkman tau^2
-  test   = "knha",       # Hartung–Knapp–Sidik–Jonkman inference
-  data   = dat_cli
-)
-summary(fit_clin)
-
-# 6) CR2 robust SEs clustered by Study; align cluster IDs to model rows
-cluster_vec <- dat_cli$Study[fit_clin$not.na]
-
-rob_clin <- coef_test(fit_clin,
-                      cluster = cluster_vec,
-                      vcov    = "CR2",
-                      test    = "Satterthwaite")
-rob_clin
-
-#############
-#Personalized
-##############
-# 2) Join Personalized (0/1) from full (ensure one value per Study)
-by_study_outcome <- by_study_outcome %>%
-  left_join(full %>% distinct(Study, Personalized), by = "Study")
-
-# 3) Recode Personalized to a factor with explicit levels and reference
-# Handles numeric 0/1 or character "0"/"1" by coercing to numeric first
-by_study_outcome <- by_study_outcome %>%
-  mutate(
-    Personalized = suppressWarnings(as.numeric(Personalized)),
-    Personalized = factor(Personalized, levels = c(0, 1), labels = c("No", "Yes"))
-  )
-# Set "No" as reference (already first level); relevel explicitly if you like:
-by_study_outcome$Personalized <- relevel(by_study_outcome$Personalized, ref = "No")
-
-# 4) Drop rows with missing moderator or essentials
-dat_per <- subset(by_study_outcome, !is.na(Personalized) & !is.na(Effect.Size) & !is.na(var))
-stopifnot(nrow(dat_per) > 0)
-
-# 5) Fit one-moderator HKSJ model (SJ tau^2)
-fit_per <- rma(
-  yi     = dat_per$Effect.Size,
-  vi     = dat_per$var,
-  mods   = ~ Personalized,   # coefficient is Yes vs No
-  method = "SJ",             # Sidik–Jonkman tau^2
-  test   = "knha",           # Hartung–Knapp–Sidik–Jonkman inference
-  data   = dat_per
-)
-summary(fit_per)
-
-# 6) CR2 robust SEs clustered by Study; align cluster IDs to model rows
-cluster_vec <- dat_per$Study[fit_per$not.na]
-
-rob_per <- coef_test(fit_per,
-                     cluster = cluster_vec,
-                     vcov    = "CR2",
-                     test    = "Satterthwaite")
-rob_per
-
-################
-#WEIRD
-#################
-# 2) Join WEIRD (0/1) from full (ensure one value per Study)
-by_study_outcome <- by_study_outcome %>%
-  left_join(full %>% distinct(Study, WEIRD), by = "Study")
-
-# 3) Recode WEIRD to a factor with explicit levels and reference
-# Handles numeric 0/1 or character "0"/"1" by coercing to numeric first
-by_study_outcome <- by_study_outcome %>%
-  mutate(
-    WEIRD = suppressWarnings(as.numeric(WEIRD)),
-    WEIRD = factor(WEIRD, levels = c(0, 1), labels = c("Non-WEIRD", "WEIRD"))
-  )
-# Set "Non-WEIRD" as reference (already first level); relevel explicitly if desired:
-by_study_outcome$WEIRD <- relevel(by_study_outcome$WEIRD, ref = "Non-WEIRD")
-
-# 4) Drop rows with missing moderator or essentials
-dat_weird <- subset(by_study_outcome, !is.na(WEIRD) & !is.na(Effect.Size) & !is.na(var))
-stopifnot(nrow(dat_weird) > 0)
-
-# 5) Fit one-moderator HKSJ model (SJ tau^2)
-fit_weird <- rma(
-  yi     = dat_weird$Effect.Size,
-  vi     = dat_weird$var,
-  mods   = ~ WEIRD,      # coefficient is WEIRD vs Non-WEIRD
-  method = "SJ",         # Sidik–Jonkman tau^2
-  test   = "knha",       # Hartung–Knapp–Sidik–Jonkman inference
-  data   = dat_weird
-)
-summary(fit_weird)
-
-# 6) CR2 robust SEs clustered by Study; align cluster IDs to model rows
-cluster_vec <- dat_weird$Study[fit_weird$not.na]
-
-rob_weird <- coef_test(fit_weird,
-                       cluster = cluster_vec,
-                       vcov    = "CR2",
-                       test    = "Satterthwaite")
-rob_weird
-
 #################
 #Human Assisted
 ################
@@ -641,44 +502,6 @@ rob_HA <- coef_test(fit_HA,
                     test    = "Satterthwaite")
 rob_HA
 
-###########
-#FiftyPercent
-############
-# 1) Join FiftyPercentFemale (0/1) from full into by_study_outcome
-by_study_outcome <- by_study_outcome %>%
-  left_join(full %>% distinct(Study, FiftyPercentFemale), by = "Study")
-
-# 2) Recode FiftyPercentFemale to a factor with explicit levels and reference
-by_study_outcome <- by_study_outcome %>%
-  mutate(
-    FiftyPercentFemale = suppressWarnings(as.numeric(FiftyPercentFemale)),
-    FiftyPercentFemale = factor(FiftyPercentFemale, levels = c(0, 1), labels = c("No", "Yes"))
-  )
-# Set "No" as the reference level
-by_study_outcome$FiftyPercentFemale <- relevel(by_study_outcome$FiftyPercentFemale, ref = "No")
-
-# 3) Drop rows with missing moderator or essentials
-dat_ff <- subset(by_study_outcome, !is.na(FiftyPercentFemale) & !is.na(Effect.Size) & !is.na(var))
-stopifnot(nrow(dat_ff) > 0)
-
-# 4) Fit one-moderator model (HKSJ + SJ)
-fit_FF <- rma(
-  yi     = dat_ff$Effect.Size,
-  vi     = dat_ff$var,
-  mods   = ~ FiftyPercentFemale,  # coefficient is Yes vs No
-  method = "SJ",                  # Sidik–Jonkman tau^2
-  test   = "knha",                # Hartung–Knapp–Sidik–Jonkman inference
-  data   = dat_ff
-)
-summary(fit_FF)
-
-# 5) CR2 robust SEs clustered by Study; align cluster IDs to model rows
-cluster_vec <- dat_ff$Study[fit_FF$not.na]
-rob_FF <- coef_test(fit_FF,
-                    cluster = cluster_vec,
-                    vcov    = "CR2",
-                    test    = "Satterthwaite")
-rob_FF
 #############
 #Social.function
 #############
@@ -724,52 +547,17 @@ rob_SF <- coef_test(fit_SF,
                     vcov    = "CR2",
                     test    = "Satterthwaite")
 rob_SF
-#############
-#Duration.weeks
-#duration
-###############
-# 1) Join Duration.weeks (numeric) from full into by_study_outcome
-by_study_outcome <- by_study_outcome %>%
-  left_join(full %>% distinct(Study, Duration.weeks), by = "Study") %>%
-  mutate(
-    Duration_weeks = suppressWarnings(as.numeric(Duration.weeks)),
-    # Center/scale for interpretability and stability (slope per 1 SD)
-    Duration_c     = scale(Duration_weeks, center = TRUE, scale = TRUE)[,1]
-    # If you prefer slope per 4 weeks instead, use:
-    # Duration_4wk   = (Duration_weeks - mean(Duration_weeks, na.rm = TRUE)) / 4
-  )
 
-# 2) Drop rows with missing moderator or essentials
-dat_dur <- subset(by_study_outcome, !is.na(Duration_c) & !is.na(Effect.Size) & !is.na(var))
-stopifnot(nrow(dat_dur) > 0)
-
-# 3) Fit one-moderator model (HKSJ + SJ) with continuous duration
-fit_dur <- rma(
-  yi     = dat_dur$Effect.Size,
-  vi     = dat_dur$var,
-  mods   = ~ Duration_c,   # slope per 1 SD increase in Duration.weeks
-  method = "SJ",           # Sidik–Jonkman tau^2
-  test   = "knha",         # Hartung–Knapp–Sidik–Jonkman inference
-  data   = dat_dur
-)
-summary(fit_dur)
-
-# 4) CR2 robust SEs clustered by Study; align cluster IDs to model rows
-cluster_vec <- dat_dur$Study[fit_dur$not.na]
-rob_dur <- coef_test(fit_dur,
-                     cluster = cluster_vec,
-                     vcov    = "CR2",
-                     test    = "Satterthwaite")
-rob_dur
 #Method: "ActiveorPassive"
 #Unit:"Clinical", "Age", "FiftyPercentFemale"
 #Treatment:"Duration.weeks", "Personalized", "Self.guided", "Modality","Social.function"
 #Outcome:"Outcomes"
 #Setting: "WEIRD"
-terms <- c("ActiveorPassive", "WEIRD",
-           "Clinical", "Age", "FiftyPercentFemale",
-           "Duration.weeks", "Personalized", "HumanAssistance",
-           "Modality","Social.function", "Outcomes")
+#Drop: "Clinical","Duration.weeks","Modality",
+terms <- c("Social.function")
+terms <- c("ActiveorPassive")
+terms <- c("HumanAssistance")
+terms <- c("ActiveorPassive","HumanAssistance", "Social.function")
 #interact <- c("Social.function*Age")
 #formula <- reformulate(termlabels = c(terms, interact))
 formula <- reformulate(termlabels = c(terms))
@@ -781,7 +569,8 @@ MVfull <- rma.mv(yi=Effect.Size,
                  random=~1 | StudyID/ESId,
                  test="t",
                  data=full,
-                 method="REML")
+                 method="REML",
+                 tdist=TRUE)
 MVfull
 #t-test of each covariate#
 MVfull.coef <- coef_test(MVfull, cluster=full$StudyID, vcov="CR2")
@@ -790,12 +579,7 @@ MVfull.coef
 ###########################
 #forest plot
 ###########################
-study_averages <- full %>%
-  dplyr::group_by(StudyID) %>%
-  dplyr::summarise(avg_effect_size = mean(Effect.Size, na.rm = TRUE),
-            across(everything(), ~ first(.)))
-
-MVnull <- robu(formula = Effect.Size ~ 1, studynum = StudyID, data = study_averages, var.eff.size = var)
+MVnull <- robu(formula = Effect.Size ~ 1, studynum = StudyID, data = by_study_outcome, var.eff.size = var)
 m.gen <- meta::metagen(TE = Effect.Size,
                  seTE = se,
                  studlab = Study,
