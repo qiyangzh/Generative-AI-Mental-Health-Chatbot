@@ -230,22 +230,22 @@ MVnull
 #t-test of each covariate# # small-sample df approximation
 MVnull.coef <- coef_test(MVnull, cluster=full$StudyID, vcov="CR2", test = "Satterthwaite")
 MVnull.coef
-### Output prediction interval ###
-dat_clean <- data.frame(yi = full$Effect.Size, se_g = full$se)
-dat_clean <- na.omit(dat_clean)
-yi_clean <- dat_clean$yi
-se_g_clean <- dat_clean$se_g
-install.packages("pimeta")
-library(pimeta)
-pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
-print(pima_result)
-
+# ### Output prediction interval ###
+# dat_clean <- data.frame(yi = full$Effect.Size, se_g = full$se)
+# dat_clean <- na.omit(dat_clean)
+# yi_clean <- dat_clean$yi
+# se_g_clean <- dat_clean$se_g
+# install.packages("pimeta")
+# library(pimeta)
+# pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
+# print(pima_result)
+View(full[c("Study","Control", "Outcomes", "Effect.Size", "HumanAssistance")])
 #Depression
 Depression <- subset(full, Outcomes == "Depression")
-V_list <- impute_covariance_matrix(vi=Depression$var, cluster=Depression$StudyID, r=0.8)
+V_listD <- impute_covariance_matrix(vi=Depression$var, cluster=Depression$StudyID, r=0.8)
 #test="t"
 MVnull <- metafor::rma.mv(yi=Effect.Size,
-                          V=V_list,
+                          V=V_listD,
                           random=~1 | StudyID/ESId,
                           dfs  = "contain",
                           data=Depression,
@@ -258,20 +258,20 @@ MVnull
 MVnull.coef <- coef_test(MVnull, cluster=Depression$StudyID, vcov="CR2", test = "Satterthwaite")
 MVnull.coef
 
-### Output prediction interval ###
-dat_clean <- data.frame(yi = Depression$Effect.Size, se_g = Depression$se)
-dat_clean <- na.omit(dat_clean)
-yi_clean <- dat_clean$yi
-se_g_clean <- dat_clean$se_g
-pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
-print(pima_result)
+# ### Output prediction interval ###
+# dat_clean <- data.frame(yi = Depression$Effect.Size, se_g = Depression$se)
+# dat_clean <- na.omit(dat_clean)
+# yi_clean <- dat_clean$yi
+# se_g_clean <- dat_clean$se_g
+# pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
+# print(pima_result)
 
 #Anxiety
 Anxiety <- subset(full, Outcomes == "Anxiety")
-V_list <- impute_covariance_matrix(vi=Anxiety$var, cluster=Anxiety$StudyID, r=0.8)
+V_listA <- impute_covariance_matrix(vi=Anxiety$var, cluster=Anxiety$StudyID, r=0.8)
 #test="t"
 MVnull <- metafor::rma.mv(yi=Effect.Size,
-                          V=V_list,
+                          V=V_listA,
                           random=~1 | StudyID/ESId,
                           dfs  = "contain",
                           data=Anxiety,
@@ -285,19 +285,19 @@ MVnull.coef <- coef_test(MVnull, cluster=Anxiety$StudyID, vcov="CR2", test = "Sa
 MVnull.coef
 
 ### Output prediction interval ###
-dat_clean <- data.frame(yi = Anxiety$Effect.Size, se_g = Anxiety$se)
-dat_clean <- na.omit(dat_clean)
-yi_clean <- dat_clean$yi
-se_g_clean <- dat_clean$se_g
-pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
-print(pima_result)
+# dat_clean <- data.frame(yi = Anxiety$Effect.Size, se_g = Anxiety$se)
+# dat_clean <- na.omit(dat_clean)
+# yi_clean <- dat_clean$yi
+# se_g_clean <- dat_clean$se_g
+# pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
+# print(pima_result)
 
 #NA
 NeA <- subset(full, Outcomes == "Negative Affect/Mood")
-V_list <- impute_covariance_matrix(vi=NeA$var, cluster=NeA$StudyID, r=0.8)
+V_listNA <- impute_covariance_matrix(vi=NeA$var, cluster=NeA$StudyID, r=0.8)
 #test="t"
 MVnull <- metafor::rma.mv(yi=Effect.Size,
-                          V=V_list,
+                          V=V_listNA,
                           random=~1 | StudyID/ESId,
                           dfs  = "contain",
                           data=NeA,
@@ -310,20 +310,20 @@ MVnull
 MVnull.coef <- coef_test(MVnull, cluster=NeA$StudyID, vcov="CR2", test = "Satterthwaite")
 MVnull.coef
 
-### Output prediction interval ###
-dat_clean <- data.frame(yi = NeA$Effect.Size, se_g = NeA$se)
-dat_clean <- na.omit(dat_clean)
-yi_clean <- dat_clean$yi
-se_g_clean <- dat_clean$se_g
-pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
-print(pima_result)
+# ### Output prediction interval ###
+# dat_clean <- data.frame(yi = NeA$Effect.Size, se_g = NeA$se)
+# dat_clean <- na.omit(dat_clean)
+# yi_clean <- dat_clean$yi
+# se_g_clean <- dat_clean$se_g
+# pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
+# print(pima_result)
 
 #Stress
 Stress <- subset(full, Outcomes == "Stress")
-V_list <- impute_covariance_matrix(vi=Stress$var, cluster=Stress$StudyID, r=0.8)
+V_listS <- impute_covariance_matrix(vi=Stress$var, cluster=Stress$StudyID, r=0.8)
 #test="t"
 MVnull <- metafor::rma.mv(yi=Effect.Size,
-                          V=V_list,
+                          V=V_listS,
                           random=~1 | StudyID/ESId,
                           dfs  = "contain",
                           data=Stress,
@@ -337,12 +337,12 @@ MVnull.coef <- coef_test(MVnull, cluster=Stress$StudyID, vcov="CR2", test = "Sat
 MVnull.coef
 
 ### Output prediction interval ###
-dat_clean <- data.frame(yi = Stress$Effect.Size, se_g = Stress$se)
-dat_clean <- na.omit(dat_clean)
-yi_clean <- dat_clean$yi
-se_g_clean <- dat_clean$se_g
-pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
-print(pima_result)
+# dat_clean <- data.frame(yi = Stress$Effect.Size, se_g = Stress$se)
+# dat_clean <- na.omit(dat_clean)
+# yi_clean <- dat_clean$yi
+# se_g_clean <- dat_clean$se_g
+# pima_result <- pima(yi_clean, se_g_clean, method = "HK")  # Using the Hartung-Knapp method
+# print(pima_result)
 
 # yi_uni, vi_uni should be one effect and its sampling variance per study
 by_study_outcome <- full %>%
@@ -350,7 +350,8 @@ by_study_outcome <- full %>%
   dplyr::summarise(
     Effect.Size = mean(Effect.Size, na.rm = TRUE),
     var = mean(var, na.rm = TRUE),
-    n_rows = n()  # how many rows were averaged
+    n_rows = n(),  # how many rows were averaged
+    across(everything(), ~ first(.))
   )
 fit_HKSJ_SJ <- metafor::rma(
   yi     = Effect.Size,
@@ -431,7 +432,7 @@ by_study_outcome <- by_study_outcome %>%
 # Recode ActiveorPassive: 0/1 -> "Passive"/"Active" (adjust if your values are already strings)
 by_study_outcome <- by_study_outcome %>%
   mutate(
-    ActiveorPassive = factor(ActiveorPassive,
+    ActiveorPassive = factor(ActiveorPassive.y,
                              levels = c("passive", "active"),         # use c("Passive","Active") if already strings
                              labels = c("passive", "active"))
   )
@@ -513,7 +514,7 @@ by_study_outcome <- by_study_outcome %>%
 # Normalize common variants, then set levels exactly as requested
 by_study_outcome <- by_study_outcome %>%
   mutate(
-    Social.function = tolower(trimws(Social.function)),
+    Social.function = tolower(trimws(Social.function.y)),
     Social.function = case_when(
       Social.function %in% c("task-oriented","task oriented","task")   ~ "task-oriented",
       Social.function %in% c("social-oriented","social oriented","social") ~ "social-oriented",
@@ -579,24 +580,125 @@ MVfull.coef
 ###########################
 #forest plot
 ###########################
-MVnull <- robu(formula = Effect.Size ~ 1, studynum = StudyID, data = by_study_outcome, var.eff.size = var)
-m.gen <- meta::metagen(TE = Effect.Size,
-                 seTE = se,
-                 studlab = Study,
-                 data = study_averages,
-                 sm = "SMD",
-                 common = FALSE,
-                 random = TRUE,
-                 method.tau = "REML",
-                 method.random.ci = "HK")
-summary(m.gen)
-png(file = "forestplot.png", width = 2800, height = 3000, res = 300)
+m.gen <- meta::metagen(
+  TE = Effect.Size,
+  seTE = se,
+  studlab = paste(Study, "(", Outcomes, ")", sep = " "),  # e.g., Ali et al. (Depression)
+  data = by_study_outcome,
+  sm = "SMD",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "HK"
+)
 
-meta::forest(m.gen,
-             sortvar = TE,
-             prediction = TRUE,
-             print.tau2 = FALSE,
-             leftlabs = c("Author", "g", "SE"))
+png(file = "forestplot.png", width = 3500, height = 3000, res = 300)
+meta::forest(
+  m.gen,
+  sortvar = TE,
+  prediction = TRUE,
+  print.tau2 = FALSE,
+  leftlabs = c("Author (Outcomes)", "g", "SE")
+)
+dev.off()
+###########################
+#forest plot for Depression
+###########################
+m.genD <- meta::metagen(
+  TE = Effect.Size,
+  seTE = se,
+  studlab = paste(Study, sep = " "), 
+  data = subset(by_study_outcome, Outcomes == "Depression"),
+  sm = "SMD",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "HK"
+)
+
+png(file = "forestplotD.png", width = 2800, height = 3000, res = 300)
+meta::forest(
+  m.genD,
+  sortvar = TE,
+  prediction = TRUE,
+  print.tau2 = FALSE,
+  leftlabs = c("Author (Outcomes)", "g", "SE")
+)
+dev.off()
+
+###########################
+#forest plot for Anxiety
+###########################
+m.genA <- meta::metagen(
+  TE = Effect.Size,
+  seTE = se,
+  studlab = paste(Study, sep = " "),
+  data = subset(by_study_outcome, Outcomes == "Anxiety"),
+  sm = "SMD",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "HK"
+)
+
+png(file = "forestplotA.png", width = 2800, height = 3000, res = 300)
+meta::forest(
+  m.genA,
+  sortvar = TE,
+  prediction = TRUE,
+  print.tau2 = FALSE,
+  leftlabs = c("Author (Outcomes)", "g", "SE")
+)
+dev.off()
+
+###########################
+#forest plot for Stress
+###########################
+m.genS <- meta::metagen(
+  TE = Effect.Size,
+  seTE = se,
+  studlab = paste(Study, sep = " "),
+  data = subset(by_study_outcome, Outcomes == "Stress"),
+  sm = "SMD",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "HK"
+)
+
+png(file = "forestplotS.png", width = 2800, height = 3000, res = 300)
+meta::forest(
+  m.genS,
+  sortvar = TE,
+  prediction = TRUE,
+  print.tau2 = FALSE,
+  leftlabs = c("Author (Outcomes)", "g", "SE")
+)
+dev.off()
+
+###########################
+#forest plot for NA
+###########################
+m.genNA <- meta::metagen(
+  TE = Effect.Size,
+  seTE = se,
+  studlab = paste(Study, sep = " "),
+  data = subset(by_study_outcome, Outcomes == "Negative Affect/Mood"),
+  sm = "SMD",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "HK"
+)
+
+png(file = "forestplotNA.png", width = 2800, height = 3000, res = 300)
+meta::forest(
+  m.genNA,
+  sortvar = TE,
+  prediction = TRUE,
+  print.tau2 = FALSE,
+  leftlabs = c("Author (Outcomes)", "g", "SE")
+)
 dev.off()
 #################################################################################
 # Marginal Means
@@ -607,10 +709,8 @@ dev.off()
 means <- data.frame(moderator = character(0), group = character(0), beta = numeric(0), SE = numeric(0), 
                     tstat = numeric(0), df = numeric(0), p_Satt = numeric(0))
 
-mods <- c("as.factor(Personalized)", "as.factor(Modality)", "as.factor(Social.function)", 
-          "as.factor(Clinical)", "as.factor(ActiveorPassive)", "as.factor(WEIRD)",
-          "as.factor(Age)", "as.factor(FiftyPercentFemale)", "as.factor(HumanAssistance)",
-          "as.factor(Outcomes)")
+mods <- c( "as.factor(Social.function)", 
+          "as.factor(ActiveorPassive)","as.factor(HumanAssistance)")
 
 for(i in 1:length(mods)){
   # i <- 1
